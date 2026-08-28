@@ -1,0 +1,4 @@
+datasets==4.8.5
+openai==2.24.0
+PyYAML==6.0.2
+tqdm==4.67.1

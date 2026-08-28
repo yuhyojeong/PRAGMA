@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.DS_Store
+
+# Downloaded or generated benchmark artifacts
+/data/*.json
+/hf_dataset/

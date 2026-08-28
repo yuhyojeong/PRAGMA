@@ -1,0 +1,22 @@
+models:
+  schema: gpt-5-2025-08-07
+  event_generation: gpt-5-2025-08-07
+  event_query: gpt-5-2025-08-07
+  query_rewrite: gpt-5-mini-2025-08-07
+  trajectory_generation: gpt-5-2025-08-07
+  trajectory_query: gpt-5-2025-08-07
+  evidence_session: gpt-5-mini-2025-08-07
+  filler_topic: gpt-5-2025-08-07
+  filler_session: gpt-5-mini-2025-08-07
+
+concurrency:
+  evidence_users: 10
+  filler_users: 5
+  filler_sessions_per_user: 10
+
+generation:
+  max_attempts: 3
+
+sampling:
+  seed: 42
+  num_users: 100
