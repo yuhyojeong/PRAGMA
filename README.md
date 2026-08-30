@@ -165,7 +165,7 @@ This overwrites `data/response_metrics.json`.
 - `data/filler_sessions.json` — unrelated filler conversations.  
   Fields: `user_id`, `persona`, `filler_topics`, `filler_turns`.
 - `data/full_sessions.json` — final histories sorted by timestamp.  
-  Fields: `user_id`, `persona`, `timestamps`, `session_types`, `sessions`, `topics`.
+  Fields: `user_id`, `persona`, `timestamps`, `session_types`, `sessions`.
 - `data/metadata.json` — one record per `(user_id, query_type)`.  
   Fields: `user_id`, `persona`, `query_type`, `query`, `query_timestamp`, `evidence_session_timestamps`, `evidence_session_index`, `summarized_evidence`.
 - `data/response_metrics.json` — one record per evaluation item.  

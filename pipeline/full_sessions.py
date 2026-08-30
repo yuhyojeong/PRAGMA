@@ -136,17 +136,15 @@ for query in tqdm(
         idx += 1
 
     filler_turns = filler["filler_turns"]
-    filler_topics = filler.get("filler_topics", [])
     filler_timestamps = generate_filler_timestamps(user_sessions, len(filler_turns))
 
-    for i, (time, filler_turn) in enumerate(zip(filler_timestamps, filler_turns)):
+    for time, filler_turn in zip(filler_timestamps, filler_turns):
         user_sessions.append(
             {
                 "idx": idx,
                 "type": "filler",
                 "timestamp": time,
                 "session": validate_turns(filler_turn),
-                "topic": filler_topics[i] if i < len(filler_topics) else None,
             }
         )
         idx += 1
@@ -238,7 +236,6 @@ for query in tqdm(
             "timestamps": [session["timestamp"] for session in user_sessions],
             "session_types": [session["type"] for session in user_sessions],
             "sessions": [session["session"] for session in user_sessions],
-            "topics": [session.get("topic") for session in user_sessions],
         }
     )
 
