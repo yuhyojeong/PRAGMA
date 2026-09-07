@@ -27,11 +27,9 @@ FILLER_SESSIONS_PATH = RECBENCH_DIR / "data/filler_sessions.json"
 TOPIC_MODEL = CONFIG["models"]["filler_topic"]
 TURN_MODEL = CONFIG["models"]["filler_session"]
 MAX_GENERATION_ATTEMPTS = CONFIG["generation"]["max_attempts"]
-USER_WORKERS = CONFIG["concurrency"]["filler_users"]
-SESSION_WORKERS = CONFIG["concurrency"]["filler_sessions_per_user"]
+REQUEST_WORKERS = CONFIG["concurrency"]["filler_requests"]
 
 thread_local = threading.local()
-lock = threading.Lock()
 
 
 def validate_turns(turns):
@@ -192,15 +190,6 @@ def generate_filler_turns(topic: str) -> list[dict]:
     ) from last_error
 
 
-def generate_many_topic_turns(topics: list[str]) -> list[list[dict]]:
-    turns = [None] * len(topics)
-    with ThreadPoolExecutor(max_workers=SESSION_WORKERS) as executor:
-        futures = {executor.submit(generate_filler_turns, topic): i for i, topic in enumerate(topics)}
-        for future in as_completed(futures):
-            turns[futures[future]] = future.result()
-    return turns
-
-
 def main() -> None:
     query_data = load_json(QUERY_DATA_PATH, [])
     order_by_user = {item["user_id"]: i for i, item in enumerate(query_data)}
@@ -217,24 +206,56 @@ def main() -> None:
         ordered = sorted(results_by_user.values(), key=lambda item: order_by_user[item["user_id"]])
         save_json(FILLER_SESSIONS_PATH, ordered)
 
-    def process_item(query_item: dict) -> None:
-        filler_item = results_by_user[query_item["user_id"]]
-        if "filler_topics" not in filler_item:
-            filler_item["filler_topics"] = generate_filler_topics(query_item)
-        if not valid_sessions(
-            filler_item.get("filler_turns"), len(filler_item["filler_topics"])
+    topic_jobs = [
+        query_item
+        for query_item in query_data
+        if "filler_topics" not in results_by_user[query_item["user_id"]]
+    ]
+    with ThreadPoolExecutor(max_workers=REQUEST_WORKERS) as executor:
+        futures = {
+            executor.submit(generate_filler_topics, query_item): query_item["user_id"]
+            for query_item in topic_jobs
+        }
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc="Generating filler topics",
         ):
-            filler_item["filler_turns"] = generate_many_topic_turns(filler_item["filler_topics"])
+            user_id = futures[future]
+            results_by_user[user_id]["filler_topics"] = future.result()
+            write_results()
 
-    with ThreadPoolExecutor(max_workers=USER_WORKERS) as executor:
-        futures = {executor.submit(process_item, item): item["user_id"] for item in query_data}
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Generating filler sessions"):
-            future.result()
-            with lock:
+    jobs = []
+    pending_by_user = {}
+    turns_by_user = {}
+    for query_item in query_data:
+        user_id = query_item["user_id"]
+        filler_item = results_by_user[user_id]
+        topics = filler_item["filler_topics"]
+        if valid_sessions(filler_item.get("filler_turns"), len(topics)):
+            continue
+        turns_by_user[user_id] = [None] * len(topics)
+        pending_by_user[user_id] = len(topics)
+        jobs.extend((user_id, index, topic) for index, topic in enumerate(topics))
+
+    with ThreadPoolExecutor(max_workers=REQUEST_WORKERS) as executor:
+        futures = {
+            executor.submit(generate_filler_turns, topic): (user_id, index)
+            for user_id, index, topic in jobs
+        }
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc="Generating filler sessions",
+        ):
+            user_id, index = futures[future]
+            turns_by_user[user_id][index] = future.result()
+            pending_by_user[user_id] -= 1
+            if pending_by_user[user_id] == 0:
+                results_by_user[user_id]["filler_turns"] = turns_by_user[user_id]
                 write_results()
 
-    with lock:
-        write_results()
+    write_results()
 
 
 if __name__ == "__main__":

@@ -10,9 +10,8 @@ models:
   filler_session: gpt-5-mini-2025-08-07
 
 concurrency:
-  evidence_users: 10
-  filler_users: 5
-  filler_sessions_per_user: 10
+  evidence_requests: 20
+  filler_requests: 20
 
 generation:
   max_attempts: 3

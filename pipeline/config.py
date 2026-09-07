@@ -56,7 +56,7 @@ def load_config() -> dict:
         _require_string(models, "models", key)
 
     concurrency = _require_mapping(config, "concurrency")
-    for key in ("evidence_users", "filler_users", "filler_sessions_per_user"):
+    for key in ("evidence_requests", "filler_requests"):
         _require_positive_int(concurrency, "concurrency", key)
 
     generation = _require_mapping(config, "generation")

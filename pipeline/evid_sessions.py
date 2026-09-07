@@ -29,10 +29,9 @@ QUERY_DATA_PATH = RECBENCH_DIR / "data/query_data.json"
 EVID_SESSIONS_PATH = RECBENCH_DIR / "data/evid_sessions.json"
 MODEL = CONFIG["models"]["evidence_session"]
 MAX_GENERATION_ATTEMPTS = CONFIG["generation"]["max_attempts"]
-USER_WORKERS = CONFIG["concurrency"]["evidence_users"]
+REQUEST_WORKERS = CONFIG["concurrency"]["evidence_requests"]
 
 thread_local = threading.local()
-lock = threading.Lock()
 
 
 def validate_turns(turns):
@@ -179,35 +178,6 @@ def request_turns(system_prompt, user_prompt, label):
     ) from last_error
 
 
-def generate_many(items: list[tuple[str, str]], fn) -> list[list[dict]]:
-    turns = [None] * len(items)
-    if not items:
-        return turns
-    with ThreadPoolExecutor(max_workers=len(items)) as executor:
-        futures = {executor.submit(fn, text, timestamp): i for i, (text, timestamp) in enumerate(items)}
-        for future in as_completed(futures):
-            turns[futures[future]] = future.result()
-    return turns
-
-
-def ensure_event_sessions(query_item: dict, evid_item: dict) -> None:
-    events = query_item["events"]
-    timestamps = query_item["event_timestamps"]
-    if valid_sessions(evid_item.get("event_turns"), len(events)):
-        return
-    evid_item["event_timestamps"] = timestamps
-    evid_item["event_turns"] = generate_many(list(zip(events, timestamps)), generate_event_turns)
-
-
-def ensure_trajectory_sessions(query_item: dict, evid_item: dict) -> None:
-    trajectory = query_item["trajectory"]
-    timestamps = query_item["trajectory_timestamps"]
-    if valid_sessions(evid_item.get("trajectory_turns"), len(trajectory)):
-        return
-    evid_item["trajectory_timestamps"] = timestamps
-    evid_item["trajectory_turns"] = generate_many(list(zip(trajectory, timestamps)), generate_trajectory_turns)
-
-
 def main() -> None:
     query_data = load_json(QUERY_DATA_PATH, [])
     order_by_user = {item["user_id"]: i for i, item in enumerate(query_data)}
@@ -224,20 +194,58 @@ def main() -> None:
         ordered = sorted(results_by_user.values(), key=lambda item: order_by_user[item["user_id"]])
         save_json(EVID_SESSIONS_PATH, ordered)
 
-    def process_item(query_item: dict) -> None:
-        evid_item = results_by_user[query_item["user_id"]]
-        ensure_event_sessions(query_item, evid_item)
-        ensure_trajectory_sessions(query_item, evid_item)
+    jobs = []
+    pending_by_user = {}
+    updates_by_user = {}
+    for query_item in query_data:
+        user_id = query_item["user_id"]
+        evid_item = results_by_user[user_id]
+        user_jobs = []
+        updates = {}
 
-    with ThreadPoolExecutor(max_workers=USER_WORKERS) as executor:
-        futures = {executor.submit(process_item, item): item["user_id"] for item in query_data}
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Generating evidence sessions"):
-            future.result()
-            with lock:
+        events = query_item["events"]
+        event_timestamps = query_item["event_timestamps"]
+        if not valid_sessions(evid_item.get("event_turns"), len(events)):
+            updates["event_timestamps"] = event_timestamps
+            updates["event_turns"] = [None] * len(events)
+            user_jobs.extend(
+                ("event_turns", index, generate_event_turns, event, timestamp)
+                for index, (event, timestamp) in enumerate(zip(events, event_timestamps))
+            )
+
+        trajectory = query_item["trajectory"]
+        trajectory_timestamps = query_item["trajectory_timestamps"]
+        if not valid_sessions(evid_item.get("trajectory_turns"), len(trajectory)):
+            updates["trajectory_timestamps"] = trajectory_timestamps
+            updates["trajectory_turns"] = [None] * len(trajectory)
+            user_jobs.extend(
+                ("trajectory_turns", index, generate_trajectory_turns, state, timestamp)
+                for index, (state, timestamp) in enumerate(zip(trajectory, trajectory_timestamps))
+            )
+
+        if user_jobs:
+            pending_by_user[user_id] = len(user_jobs)
+            updates_by_user[user_id] = updates
+            jobs.extend((user_id, *job) for job in user_jobs)
+
+    with ThreadPoolExecutor(max_workers=REQUEST_WORKERS) as executor:
+        futures = {
+            executor.submit(fn, text, timestamp): (user_id, field, index)
+            for user_id, field, index, fn, text, timestamp in jobs
+        }
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc="Generating evidence sessions",
+        ):
+            user_id, field, index = futures[future]
+            updates_by_user[user_id][field][index] = future.result()
+            pending_by_user[user_id] -= 1
+            if pending_by_user[user_id] == 0:
+                results_by_user[user_id].update(updates_by_user[user_id])
                 write_results()
 
-    with lock:
-        write_results()
+    write_results()
 
 
 if __name__ == "__main__":

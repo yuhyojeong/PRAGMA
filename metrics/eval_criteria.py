@@ -3,7 +3,6 @@ Generate per-query alignment and grounding evaluation rubrics.
 
 Inputs:
     - data/metadata.json
-    - data/query_data.json
 
 Outputs:
     - data/response_metrics.json, containing:
@@ -20,19 +19,13 @@ from tqdm import tqdm
 with open(RECBENCH_DIR / "data/metadata.json", "r") as f:
     metadata = json.load(f)
 
-with open(RECBENCH_DIR / "data/query_data.json", "r") as f:
-    query_data = json.load(f)
-
-qd_by_user = {qd["user_id"]: qd for qd in query_data}
-
 results = []
 
 for meta in tqdm(metadata, leave=False):
     query_type = meta["query_type"]
     events = meta["summarized_evidence"]
-    axes = qd_by_user[meta["user_id"]]["axes"]
     
-    # main metric (alignment)
+    # metrics (alignment, grounding)
     if query_type == "type1":
         align = f"""Does the response recommend a next step that meaningfully builds on the user’s prior attempts, rather than simply repeating past actions or suggesting something unrelated?
 Output 1 if yes, 0 otherwise.

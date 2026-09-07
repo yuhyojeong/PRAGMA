@@ -18,6 +18,8 @@ from tqdm import tqdm
 
 
 DATE_FMT = "%Y-%m-%d"
+HISTORY_START = date(2025, 5, 1)
+QUERY_DATE = date(2026, 5, 1)
 
 def parse_date(value: str) -> date:
     return datetime.strptime(value, DATE_FMT).date() # convert string to date
@@ -25,6 +27,23 @@ def parse_date(value: str) -> date:
 
 def format_date(value: date) -> str:
     return value.strftime(DATE_FMT) # convert date to string
+
+
+def validate_timestamps(timestamps: list[str], user_id: str, session_type: str) -> None:
+    for index, value in enumerate(timestamps):
+        try:
+            timestamp = parse_date(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid {session_type} timestamp at index {index} "
+                f"for user {user_id}: {value!r}"
+            ) from exc
+        if not HISTORY_START <= timestamp < QUERY_DATE:
+            raise ValueError(
+                f"{session_type.capitalize()} timestamp at index {index} for user "
+                f"{user_id} must be in [{format_date(HISTORY_START)}, "
+                f"{format_date(QUERY_DATE)}), got {value!r}"
+            )
 
 
 def validate_turns(turns):
@@ -56,14 +75,14 @@ def generate_filler_timestamps(user_sessions: list[dict], filler_count: int) -> 
     slots: list[tuple[date, date]] = []
 
     first = base_dates[0]
-    slots.append((parse_date("2025-05-01"), first))
+    slots.append((HISTORY_START, first))
 
     for left, right in zip(base_dates, base_dates[1:]):
         if left < right:
             slots.append((left, right))
 
     last = base_dates[-1]
-    slots.append((last, parse_date("2026-05-01")))
+    slots.append((last, QUERY_DATE))
 
     # how many fillers to assign to each slot
     assignments = [0] * len(slots)
@@ -83,7 +102,7 @@ def generate_filler_timestamps(user_sessions: list[dict], filler_count: int) -> 
                 candidate_days.append(candidate)
 
         filler_timestamps.extend(format_date(day) for day in candidate_days)
-    return filler_timestamps[:filler_count]
+    return filler_timestamps
 
 
 with open(RECBENCH_DIR / "data/evid_sessions.json", "r") as f:
@@ -109,31 +128,32 @@ for query in tqdm(
     evid = evid_by_user[query["user_id"]]
     filler = filler_by_user[query["user_id"]]
     user_sessions = []
-    idx = 0
 
+    if len(evid["event_timestamps"]) != len(evid["event_turns"]):
+        raise ValueError(f"User {query['user_id']} has mismatched event timestamps and turns.")
+    validate_timestamps(evid["event_timestamps"], query["user_id"], "event")
     for local_idx, (time, event) in enumerate(zip(evid["event_timestamps"], evid["event_turns"])):
         user_sessions.append(
             {
-                "idx": idx, # original indices
                 "local_idx": local_idx,
                 "type": "event",
                 "timestamp": time,
                 "session": validate_turns(event),
             }
         )
-        idx += 1
 
+    if len(evid["trajectory_timestamps"]) != len(evid["trajectory_turns"]):
+        raise ValueError(f"User {query['user_id']} has mismatched trajectory timestamps and turns.")
+    validate_timestamps(evid["trajectory_timestamps"], query["user_id"], "trajectory")
     for local_idx, (time, traj) in enumerate(zip(evid["trajectory_timestamps"], evid["trajectory_turns"])):
         user_sessions.append(
             {
-                "idx": idx,
                 "local_idx": local_idx,
                 "type": "trajectory",
                 "timestamp": time,
                 "session": validate_turns(traj),
             }
         )
-        idx += 1
 
     filler_turns = filler["filler_turns"]
     filler_timestamps = generate_filler_timestamps(user_sessions, len(filler_turns))
@@ -141,13 +161,11 @@ for query in tqdm(
     for time, filler_turn in zip(filler_timestamps, filler_turns):
         user_sessions.append(
             {
-                "idx": idx,
                 "type": "filler",
                 "timestamp": time,
                 "session": validate_turns(filler_turn),
             }
         )
-        idx += 1
 
     user_sessions.sort(key=lambda x: x["timestamp"])
     
@@ -170,15 +188,11 @@ for query in tqdm(
             type1_index.append(index)
             event_index_by_local[session["local_idx"]] = index
             event_timestamp_by_local[session["local_idx"]] = session["timestamp"]
-            session["idx"] = index # new indices
         elif session["type"] == "trajectory":
             type3_timestamp.append(session["timestamp"])
             type3_index.append(index)
             trajectory_index_by_local[session["local_idx"]] = index
             trajectory_timestamp_by_local[session["local_idx"]] = session["timestamp"]
-            session["idx"] = index
-        else: # fillers
-            session["idx"] = index
 
     for local_idx in query["type2_evid"]:
         type2_timestamp.append(event_timestamp_by_local[local_idx])

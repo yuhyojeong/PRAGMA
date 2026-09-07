@@ -90,7 +90,7 @@ export OPENAI_API_KEY="your-api-key"
 
 Edit `config.yaml` to use other OpenAI models or change generation concurrency, retry limits, and user-sampling settings. Model IDs are configured separately for each construction task, so stages can be changed independently. Stages that request JSON-schema outputs require an OpenAI model that supports Structured Outputs.
 
-The evidence and filler `concurrency` values control how many users are processed in parallel. `filler_sessions_per_user` controls concurrent session generation within each filler user. Reduce these values if API rate limits are encountered. All configuration fields are required; missing or invalid values stop the pipeline with an explicit error.
+`evidence_requests` and `filler_requests` directly limit the total number of concurrent API requests in their respective stages. Reduce these values if API rate limits are encountered. All configuration fields are required; missing or invalid values stop the pipeline with an explicit error.
 
 ### Run the Pipeline
 

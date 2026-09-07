@@ -49,6 +49,7 @@ def select_steps(args: argparse.Namespace) -> list[tuple[str, Path]]:
         steps.extend(METRIC_STEPS)
 
     valid_names = {name for name, _ in steps}
+    # check step names
     unknown = args.only | args.skip
     if args.start:
         unknown.add(args.start)
