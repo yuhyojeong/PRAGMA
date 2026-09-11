@@ -1,7 +1,8 @@
 # 🧩 PRAGMA
 
-This is the official repository for **PRAGMA: Evaluating Personalized Guidance with Memory Alignment in Lifelong Conversations** (EMNLP 2026).
+This is the official repository for **[PRAGMA: Evaluating Personalized Guidance with Memory Alignment in Lifelong Conversations](https://arxiv.org/abs/2609.09664)** (EMNLP 2026).
 
+[![Paper](https://img.shields.io/badge/arXiv-2609.09664-b31b1b.svg)](https://arxiv.org/abs/2609.09664)
 [![Dataset](https://img.shields.io/badge/🤗%20Dataset-Hugging%20Face-yellow)](https://huggingface.co/datasets/stellahj/PRAGMA)
 
 ---
@@ -188,4 +189,14 @@ Index relationships:
 
 ## 📜 Citation
 
-Citation information will be added with the paper release.
+```bibtex
+@misc{yu2026pragmaevaluatingpersonalizedguidance,
+  title={PRAGMA: Evaluating Personalized Guidance with Memory Alignment in Lifelong Conversations},
+  author={Hyojeong Yu and Hyukhun Koh and Minsung Kim and Yunah Jang and Kyomin Jung},
+  year={2026},
+  eprint={2609.09664},
+  archivePrefix={arXiv},
+  primaryClass={cs.AI},
+  url={https://arxiv.org/abs/2609.09664},
+}
+```
